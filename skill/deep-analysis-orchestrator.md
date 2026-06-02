@@ -76,21 +76,112 @@ z zebranymi danymi — chyba że użytkownik jawnie zdecyduje inaczej.
 
 #### Materiały wejściowe dostarczone przez użytkownika
 
-Wywołaj `deep-analysis-data-prep` jako Task z parametrami:
+##### Krok A — Składowanie oryginałów
+
+Zapisz wszystkie materiały bez modyfikacji:
 
 ```
-- opis systemu z pytania 3
-- ścieżki do dostarczonych materiałów (pliki, obrazy, tekst)
-- ścieżka do katalogu state/
-- lista faz wybranych przez użytkownika
+state/inputs/raw/
+  [nazwa-pliku-oryginał].[ext]
 ```
 
-Data-prep skill tworzy strukturę katalogów, normalizuje materiały,
-ocenia złożoność i pokrycie, buduje seed files dla każdej fazy.
+##### Krok B — Konwersja i normalizacja
 
-Po zakończeniu data-prep:
-- wyświetl użytkownikowi wynik z handoff (złożoność + pokrycie % per faza)
-- czekaj na potwierdzenie przed uruchomieniem pierwszej fazy
+Dla każdego materiału:
+
+| Typ | Akcja |
+|---|---|
+| Obraz / screenshot | Opisz zawartość, wyekstrahuj zdarzenia, aktorów, granice. Oznacz jako `converted: lossy` jeśli struktura mogła zostać utracona. |
+| Tekst niestrukturalny | Znormalizuj do formatu MD z sekcjami: Zdarzenia, Aktorzy, Granice, Hot Spoty, Pytania otwarte. |
+| Gotowy ES / diagram | Wyekstrahuj dane per kategoria jak wyżej. |
+
+Zapisz wynik do:
+
+```
+state/inputs/processed/
+  [nazwa-pliku]-processed.md
+```
+
+Jeśli konwersja była oznaczona jako `lossy` — zapytaj użytkownika o weryfikację opisu
+przed dalszym użyciem.
+
+##### Krok C — Ocena pokrycia
+
+Na podstawie złożoności systemu (z pytania 3) i zawartości przetworzonych materiałów
+oceń pokrycie per faza:
+
+```
+Big Picture   [X%] — kryteria: aktorzy, zdarzenia domenowe, granice systemu,
+                               liczba zdarzeń względem złożoności
+Process Level [X%] — kryteria: przepływy, reguły biznesowe, wyjątki, hot spoty
+Design Level  [X%] — kryteria: agregaty, encje, kontrakty, bounded contexts
+```
+
+Zapisz wynik do `state/inputs/processed/index.md` i zaprezentuj użytkownikowi
+przed startem pierwszej fazy.
+
+##### Krok D — Zasilanie wsteczne
+
+Jeśli użytkownik dostarczył materiały z wyższej fazy a niższa nie istnieje:
+
+```
+Design Level  →  ekstrahuj dane przydatne dla Process Level i Big Picture
+Process Level →  ekstrahuj dane przydatne dla Big Picture
+```
+
+Dane oznacz jako `derived-from: phase-[N]` i zapisz do:
+
+```
+state/inputs/processed/
+  phase-[N]-derived-for-[M].md
+```
+
+##### Krok E — Przygotowanie seed dla agenta (data-prep)
+
+Przed uruchomieniem każdej fazy orkiestrator wykonuje krok data-prep:
+
+```
+Wejście:  state/inputs/processed/ — wszystkie pliki dotyczące danej fazy
+Wyjście:  state/inputs/processed/phase-[X]-seed.md
+Zawiera:  skompilowane dane wejściowe + ocena pokrycia + oznaczenia źródeł
+```
+
+Format nagłówka seed:
+
+```markdown
+# Seed: Phase [X] — [nazwa fazy]
+<!-- generated-by: orchestrator, session: [nazwa] -->
+<!-- coverage: [X%] -->
+<!-- sources: [lista plików źródłowych] -->
+```
+
+Agent fazy startuje z tym plikiem jako pierwszym kontekstem.
+
+---
+
+#### Struktura katalogów po Kroku 2a
+
+```
+state/
+  inputs/
+    raw/                           ← oryginały użytkownika, bez modyfikacji
+    processed/
+      index.md                     ← lista materiałów + ocena % per faza
+      [nazwa]-processed.md         ← znormalizowane materiały
+      phase-[N]-derived-for-[M].md ← dane z zasilania wstecznego
+      phase-1-seed.md              ← seed dla Big Picture
+      phase-2-seed.md              ← seed dla Process Level (jeśli dane istnieją)
+  session.md
+```
+
+`index.md` zawiera:
+
+```markdown
+# Inputs Index
+| Plik | Typ | Konwersja | Użyty w fazach | Pokrycie |
+|---|---|---|---|---|
+| diagram.png | obraz | lossy | phase-1, phase-2 | BP: 40%, PL: 20% |
+```
 
 ---
 
@@ -129,6 +220,20 @@ Użytkownik decyduje co i kiedy badać, sub-agenci dostają konteksty od użytko
 Claude reaguje na pytania i pilnuje spójności na żądanie.
 Kiedy warto: użytkownik ma gotowy plan i chce narzędzia, nie prowadzenia.
 
+---
+pliki skilli w repo:
+deep-analysis-big-picture - Big picture główny plik
+	phase-1-template - Big Picture
+deep-analysis-specialist - Proccess Level
+	phase-2-template - Proccess Level
+deep-analysis-design-level
+	phase-3-template - Design Level
+
+deep-analysis-data-prep - przygotowanie danych
+deep-analysis-specialist
+deep-analysis-llm-blueprint
+deep-analysis-mermaid-generator
+deep-analysis-orchestrator
 ---
 
 ## Mapa zdarzeń → akcje
@@ -352,56 +457,7 @@ sources:
 
 ---
 
-## Generowanie outputu
-
-Wywoływane przez orkiestratora po zakończeniu wszystkich wybranych faz.
-
-### Opcje dla użytkownika
-
-Wyświetl listę wyboru — użytkownik może wybrać więcej niż jedną opcję:
-
-```
-1. Diagram Mermaid     ← domyślna, poziom BP
-2. Opis słowny
-3. LLM Blueprint (YAML)
-4. Kombinacja (1 + 3)
-```
-
-Jeśli użytkownik wybrał opcję 1 — zapytaj który poziom ES:
-```
-[ ] Big Picture   ← domyślny
-[ ] Process Level
-[ ] Design Level
-```
-
-### Wywołanie skillów output
-
-```
-Opcja 1 → Task(deep-analysis-mermaid-generator,
-               fazy: [lista ukończonych], poziom: [BP/PL/DL])
-
-Opcja 2 → orkiestrator generuje opis słowny bezpośrednio
-           na podstawie phase-X-output.md (nie wymaga osobnego skilla)
-
-Opcja 3 → Task(deep-analysis-llm-blueprint,
-               fazy: [lista ukończonych])
-
-Opcja 4 → Task(mermaid) + Task(llm-blueprint) sekwencyjnie
-```
-
-Każdy skill output zapisuje wynik do `state/output/` i zwraca ścieżkę pliku.
-
----
-
 ## Relacje z innymi skillami systemu
 
-Po wygenerowaniu outputu przeszukaj lokalne skille i wyświetl użytkownikowi
-opcje kontynuacji jako listę wyboru. Nie uruchamiaj automatycznie.
-
-```
-Możliwe kontynuacje (jeśli dostępne lokalnie):
-[ ] legacy-dotnet-ddd-refactoring  ← implementacja DDD w .NET
-[ ] legacy-refactor-assessment     ← ocena kosztu refaktoru
-[ ] analysis-assistant             ← analiza porównawcza decyzji
-```
-
+Przeszukaj lokalnego cluada w poszukiwaniu skilli które umożliwią implementacje założeń
+Ale nie uruchamiaj a wyświetl je jako opcje do kontynuacji, po zakończonej analizie
