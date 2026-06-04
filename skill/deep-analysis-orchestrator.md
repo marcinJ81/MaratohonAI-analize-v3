@@ -16,6 +16,7 @@ tools: Read, Write, Edit, Bash, Glob, LS, Task
 Analiza to pętla zwrotna, nie liniowy proces.
 Orkiestrator nie analizuje domeny — zarządza procesem, stanem i decyzjami o przejściu między fazami.
 Sub-skille analizują. Orkiestrator koordynuje.
+Orkiestartor zapisuje w projekcie plik loga, będzie tam zapisywana każda akcja która została wykonana przez orkiestrator w formacie data, godzina, krótko co zostało zrobione (dwa, trzy słowa)
 
 ---
 
@@ -29,11 +30,16 @@ Odczytaj `state/session.md`:
 
 ---
 
+### Krok 1a: przeszukaj folder material_input
+
+Powinien być w projekcie w którym aktualnie będziesz prowadził analizę.
+Jeżeli go nie ma lub jest pusty, wyświetl użytkownikowi informację że nie znalazłeś materiałów wejściowych do analizy.
+
 ### Krok 2a: Inicjalizacja nowej sesji
 
 #### Pytania orientacyjne
 
-Zadaj tylko te, których nie można wywnioskować z kontekstu:
+Zadaj tylko te, których nie można wywnioskować z kontekstu, zadaj jedno pytanie oczekuj odpowiedzi, potem kolejne aż do piątego:
 
 ```
 1. Co jest przedmiotem analizy — system, proces, decyzja architektoniczna?
@@ -42,8 +48,7 @@ Zadaj tylko te, których nie można wywnioskować z kontekstu:
 4. Czy istnieje już Event Storming lub inna analiza wejściowa?
 5. Jaki poziom szczegółowości — tylko Big Picture, do Process Level, pełna analiza?
 ```
-
-Na podstawie odpowiedzi na pytanie 3 wykonaj wstępną ocenę złożoności systemu:
+Po uzyskaniu odpowiedzi na wszystkie pytania rozpocznij wstępną ocenę złożoności systemu:
 
 ```
 Złożoność niska:   jeden kontekst, mało integracji, prosta domena
@@ -51,13 +56,15 @@ Złożoność średnia: kilka kontekstów lub integracji, reguły biznesowe
 Złożoność wysoka:  wiele kontekstów, złożone reguły, dużo integracji
 ```
 
-Wynik złożoności jest podstawą do oceny pokrycia materiałami (patrz niżej).
+Wynik złożoności przekaż jako parametr do `deep-analysis-coverage-assessment`.
 
 ---
 
 #### Brak materiałów wejściowych
 
 Zasugeruj start od Big Picture w Trybie 2.
+Ale pozwól wybrać użytkownikowi Tryb pracy — patrz sekcja Tryb Pracy, nie wybieraj za niego nawet
+jeżeli brak jest danych albo są niekompletne albo kompletne.
 
 Jeśli użytkownik wybierze inny tryb lub inną fazę startową — poinformuj że wyniki mogą być
 niewystarczające. Kontynuuj zgodnie z decyzją użytkownika.
@@ -105,20 +112,24 @@ state/inputs/processed/
 Jeśli konwersja była oznaczona jako `lossy` — zapytaj użytkownika o weryfikację opisu
 przed dalszym użyciem.
 
-##### Krok C — Ocena pokrycia
+##### Krok C — Ocena pokrycia (delegowana do sub-skilla)
 
-Na podstawie złożoności systemu (z pytania 3) i zawartości przetworzonych materiałów
-oceń pokrycie per faza:
+Po zakończeniu Kroku B uruchom sub-skill `deep-analysis-coverage-assessment` jako Task:
 
 ```
-Big Picture   [X%] — kryteria: aktorzy, zdarzenia domenowe, granice systemu,
-                               liczba zdarzeń względem złożoności
-Process Level [X%] — kryteria: przepływy, reguły biznesowe, wyjątki, hot spoty
-Design Level  [X%] — kryteria: agregaty, encje, kontrakty, bounded contexts
+Wejście:
+  - state/inputs/processed/    ← wszystkie pliki po normalizacji
+  - złożoność systemu          ← niska / średnia / wysoka (z pytania 3)
+
+Oczekiwane wyjście:
+  - state/inputs/processed/index.md   ← tabela pokrycia + szczegóły per faza
+  - handoff JSON                      ← coverage%, recommended_start_phase, blockers
 ```
 
-Zapisz wynik do `state/inputs/processed/index.md` i zaprezentuj użytkownikowi
-przed startem pierwszej fazy.
+Po zakończeniu sub-skilla:
+1. Wyświetl użytkownikowi tabelę pokrycia z `index.md`
+2. Uwzględnij `blockers` z handoff JSON przy pytaniu o tryb pracy
+3. Przekaż `recommended_start_phase` jako sugestię (nie decyzję — użytkownik decyduje)
 
 ##### Krok D — Zasilanie wsteczne
 
@@ -136,6 +147,10 @@ state/inputs/processed/
   phase-[N]-derived-for-[M].md
 ```
 
+Po uzupełnieniu danymi z zasilania wstecznego — uruchom `deep-analysis-coverage-assessment`
+ponownie, przekazując zaktualizowany katalog `state/inputs/processed/`.
+Zaktualizowany `index.md` zastępuje poprzedni wynik.
+
 ##### Krok E — Przygotowanie seed dla agenta (data-prep)
 
 Przed uruchomieniem każdej fazy orkiestrator wykonuje krok data-prep:
@@ -151,7 +166,7 @@ Format nagłówka seed:
 ```markdown
 # Seed: Phase [X] — [nazwa fazy]
 <!-- generated-by: orchestrator, session: [nazwa] -->
-<!-- coverage: [X%] -->
+<!-- coverage: [X%] -->          ← wartość z index.md dla tej fazy
 <!-- sources: [lista plików źródłowych] -->
 ```
 
@@ -166,7 +181,7 @@ state/
   inputs/
     raw/                           ← oryginały użytkownika, bez modyfikacji
     processed/
-      index.md                     ← lista materiałów + ocena % per faza
+      index.md                     ← lista materiałów + ocena % per faza (z coverage-assessment)
       [nazwa]-processed.md         ← znormalizowane materiały
       phase-[N]-derived-for-[M].md ← dane z zasilania wstecznego
       phase-1-seed.md              ← seed dla Big Picture
@@ -174,14 +189,8 @@ state/
   session.md
 ```
 
-`index.md` zawiera:
-
-```markdown
-# Inputs Index
-| Plik | Typ | Konwersja | Użyty w fazach | Pokrycie |
-|---|---|---|---|---|
-| diagram.png | obraz | lossy | phase-1, phase-2 | BP: 40%, PL: 20% |
-```
+`index.md` jest generowany wyłącznie przez `deep-analysis-coverage-assessment`.
+Orkiestrator nie zapisuje do tego pliku bezpośrednio.
 
 ---
 
@@ -221,26 +230,32 @@ Claude reaguje na pytania i pilnuje spójności na żądanie.
 Kiedy warto: użytkownik ma gotowy plan i chce narzędzia, nie prowadzenia.
 
 ---
-pliki skilli w repo:
-deep-analysis-big-picture - Big picture główny plik
-	phase-1-template - Big Picture
-deep-analysis-specialist - Proccess Level
-	phase-2-template - Proccess Level
-deep-analysis-design-level
-	phase-3-template - Design Level
 
-deep-analysis-data-prep - przygotowanie danych
+## Pliki skilli w repo
+
+```
+deep-analysis-big-picture          ← Big Picture (główny plik)
+  phase-1-template                 ← szablon Big Picture
+deep-analysis-specialist           ← Process Level
+  phase-2-template                 ← szablon Process Level
+deep-analysis-design-level         ← Design Level
+  phase-3-template                 ← szablon Design Level
+
+deep-analysis-coverage-assessment  ← ocena pokrycia faz materiałami ← NOWY
+deep-analysis-data-prep            ← przygotowanie danych
 deep-analysis-specialist
 deep-analysis-llm-blueprint
 deep-analysis-mermaid-generator
 deep-analysis-orchestrator
+```
+
 ---
 
 ## Mapa zdarzeń → akcje
 
 Każdy sub-skill po zakończeniu zwraca handoff JSON. Orkiestrator interpretuje go według tej mapy.
 
-### Schemat handoff JSON
+### Schemat handoff JSON — fazy analityczne
 
 ```json
 {
@@ -253,7 +268,25 @@ Każdy sub-skill po zakończeniu zwraca handoff JSON. Orkiestrator interpretuje 
 }
 ```
 
-### status == "completed"
+### Schemat handoff JSON — coverage-assessment
+
+```json
+{
+  "skill": "coverage-assessment",
+  "status": "completed",
+  "output_file": "state/inputs/processed/index.md",
+  "coverage": {
+    "big_picture": 85,
+    "process_level": 40,
+    "design_level": 10
+  },
+  "recommended_start_phase": "big-picture",
+  "blockers": ["lista brakujących danych które blokują start fazy"],
+  "user_decision_required": false
+}
+```
+
+### status == "completed" (fazy analityczne)
 
 Jeśli `user_decision_required == true` → wyświetl `open_questions`, czekaj na potwierdzenie
 użytkownika przed przejściem dalej.
@@ -264,6 +297,12 @@ suggested_next == "design-level"   → zaproponuj uruchomienie skill-3-design-le
 suggested_next == "specialist"     → zapytaj którą fazę specjalistyczną (S1/S2/S3)
 suggested_next == "end"            → podsumuj sesję, zaktualizuj session.md, zakończ
 ```
+
+### status == "completed" (coverage-assessment)
+
+Wyświetl tabelę pokrycia. Jeśli `user_decision_required == true` — wyświetl pytanie z handoff,
+zbierz odpowiedź, przekaż do coverage-assessment jako kontynuację.
+Następnie przejdź do Kroku D lub Kroku E zgodnie z pipeline.
 
 ### status == "paused"
 
@@ -302,6 +341,10 @@ Uruchamiaj sub-skille jako Task z odpowiednimi danymi wejściowymi.
 ### Dane wejściowe dla każdego sub-skilla
 
 ```
+Skill 0a (Coverage Assessment):
+  - state/inputs/processed/       ← katalog z przetworzonymi materiałami
+  - złożoność systemu             ← niska / średnia / wysoka
+
 Skill 1 (Big Picture):
   - tryb pracy
   - cel analizy
@@ -368,6 +411,8 @@ Złożoność systemu: [niska / średnia / wysoka]
 | Specialist | not-started / in-progress / completed | state/phase-s-output.md | — |
 
 ## Materiały wejściowe
+<!-- wypełniane przez coverage-assessment — nie edytuj ręcznie -->
+<!-- źródło: state/inputs/processed/index.md -->
 | Plik | Typ | Konwersja | Pokrycie BP | Pokrycie PL | Pokrycie DL |
 |---|---|---|---|---|---|
 
@@ -380,6 +425,7 @@ Złożoność systemu: [niska / średnia / wysoka]
 - [inne decyzje]
 
 ## Historia handoffów
+- [data] coverage-assessment → completed, BP: [X%], PL: [X%], DL: [X%]
 - [data] Faza 1 → completed, suggested_next: process-level
 - [data] Faza 2 → paused, open_questions: [...]
 ```
@@ -459,5 +505,5 @@ sources:
 
 ## Relacje z innymi skillami systemu
 
-Przeszukaj lokalnego cluada w poszukiwaniu skilli które umożliwią implementacje założeń
-Ale nie uruchamiaj a wyświetl je jako opcje do kontynuacji, po zakończonej analizie
+Przeszukaj lokalnego Claude'a w poszukiwaniu skilli które umożliwią implementację założeń.
+Nie uruchamiaj — wyświetl je jako opcje do kontynuacji po zakończonej analizie.
