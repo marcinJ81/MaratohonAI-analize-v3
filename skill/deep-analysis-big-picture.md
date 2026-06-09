@@ -83,22 +83,6 @@ Wyświetl użytkownikowi do weryfikacji i korekty.
 > - eksploatacja — wydobycie tego co ekspert domenowy wie
 > - eksploracja — zasugerowanie tego czego ekspert nie widzi bo jest za blisko domeny
 >
-> Implementacja:
-> - na podstawie zebranych zdarzeń i opisu domeny zaproponuj zdarzenia typowe dla podobnych domen
->   których nie ma w materiałach
-> - zaproponuj aktorów których logicznie powinni istnieć a nie pojawili się w materiale
-> - wskaż obszary domeny niepokryte żadnym zdarzeniem
->
-> Każda propozycja oznaczona jako `suggested — not in source materials`.
-> Użytkownik potwierdza / odrzuca / modyfikuje.
-> Zaakceptowane propozycje wchodzą do events.md z tagiem `discovered`.
->
-> **Test weryfikacyjny:**
-> Dostarcz materiały z celowo wyciętym obszarem domeny który powinien istnieć.
-> Sprawdź czy agent: zauważy lukę, zaproponuje brakujący obszar, oznaczy go poprawnie.
-> Process Level i Design Level NIE stosują tego kroku — tam wychodzenie poza kontekst
-> wprowadza niespójności.
-
 ---
 
 ## Krok 3 — Identyfikacja aktorów

@@ -16,7 +16,7 @@ tools: Read, Write, Edit, Bash, Glob, LS, Task
 Analiza to pętla zwrotna, nie liniowy proces.
 Orkiestrator nie analizuje domeny — zarządza procesem, stanem i decyzjami o przejściu między fazami.
 Sub-skille analizują. Orkiestrator koordynuje.
-Orkiestartor zapisuje w projekcie plik loga, będzie tam zapisywana każda akcja która została wykonana przez orkiestrator w formacie data, godzina, krótko co zostało zrobione (dwa, trzy słowa)
+Orkiestartor zapisuje w projekcie plik loga, będzie tam zapisywana każda akcja która została wykonana przez orkiestrator w formacie data, czas w formacie hh:mm:ss , krótko co zostało zrobione (dwa, trzy słowa)
 
 ---
 
