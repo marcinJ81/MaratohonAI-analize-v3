@@ -2,7 +2,7 @@
 name: deep-analysis-coverage-assessment
 description: >
   Sub-skill oceny pokrycia faz analizy materiałami wejściowymi.
-  Uruchamiaj po normalizacji materiałów (Krok B orchestratora), przed uruchomieniem
+  Uruchamiaj po etapie 'prepare' skilla data-prep, przed etapem 'seed' i przed uruchomieniem
   pierwszej fazy. Zwraca ocenę % pokrycia per faza i rekomendacje dla orchestratora.
 tools: Read, Write, Bash
 ---
@@ -23,7 +23,8 @@ Pyta tylko gdy brakuje danych do samej oceny pokrycia.
 
 ```
 state/inputs/processed/          ← znormalizowane materiały (*.md)
-[złożoność systemu]              ← niska / średnia / wysoka (z orchestratora)
+[złożoność systemu]              ← niska / średnia / wysoka (z handoffu data-prep)
+[tryb analizy]                   ← audit / elicit (z orchestratora)
 ```
 
 ---
@@ -46,21 +47,30 @@ Liczba zdarzeń względem złożoności:
 
 ### Process Level — kryteria oceny
 
+Zakres fazy zgodny z `deep-analysis-process-level.md`: subdomeny + typologia,
+pivotal events, bounded contexts, przepływy w pełnej gramatyce
+(aktor → komenda → zdarzenie), polityki, relacje między kontekstami, hot spoty.
+
 | Kryterium | Waga | Jak oceniać |
 |---|---|---|
-| Przepływy procesów | 30% | Czy materiały opisują kroki procesów biznesowych? |
-| Reguły biznesowe | 30% | Czy są wymienione warunki, ograniczenia, polityki? |
-| Wyjątki i hot spoty | 20% | Czy są opisane przypadki brzegowe, konflikty? |
-| Bounded Contexts (wstępne) | 20% | Czy dają się wyróżnić naturalne granice odpowiedzialności? |
+| Przepływy procesów | 25% | Czy materiały opisują kroki procesów: kto (aktor) wykonuje jaką akcję (komendę) i z jakim skutkiem (zdarzeniem)? Same listy kroków bez aktorów = 0.5 |
+| Subdomeny i core domain | 20% | Czy da się wskazać obszary odpowiedzialności i ich wagę biznesową? Czy materiały mówią co jest przewagą konkurencyjną? |
+| Reguły biznesowe i polityki | 20% | Czy są wymienione warunki, ograniczenia, reakcje na zdarzenia ("gdy X, wtedy Y")? |
+| Granice kontekstów i pivotal events | 15% | Czy widać naturalne granice odpowiedzialności? Czy materiały wskazują punkty zwrotne procesu (zdarzenia bez powrotu, zmiany właściciela)? |
+| Relacje między kontekstami | 10% | Czy opisano kto z kim się integruje, kto jest właścicielem danych, co jest przekazywane? |
+| Wyjątki i hot spoty | 10% | Czy są opisane przypadki brzegowe, konflikty, ścieżki kompensacji? |
 
 ### Design Level — kryteria oceny
+
+Zakres fazy: agregaty, niezmienniki, kontrakty per bounded context.
+Komendy i polityki oceniane są w Process Level (gramatyka przepływu), nie tutaj.
 
 | Kryterium | Waga | Jak oceniać |
 |---|---|---|
 | Agregaty / encje | 30% | Czy materiały opisują struktury danych lub modele? |
-| Kontrakty / interfejsy | 25% | Czy są opisy API, zdarzeń, komend? |
-| Bounded Contexts (nazwane) | 25% | Czy konteksty są explicite zdefiniowane? |
-| Reguły niezmienników | 20% | Czy są reguły spójności danych / inwarianty? |
+| Reguły niezmienników | 25% | Czy są reguły spójności danych / inwarianty — co nigdy nie może być naruszone? |
+| Kontrakty / interfejsy | 25% | Czy są opisy API, zdarzeń publikowanych na zewnątrz kontekstu, formatów wymiany? |
+| Reguły walidacji | 20% | Czy są reguły walidacji z rozróżnieniem źródła (domena vs aplikacja)? |
 
 ---
 
@@ -113,10 +123,22 @@ Dla każdej fazy:
 | Integracje zewnętrzne | 0 / 0.5 / 1.0 | |
 
 ### Process Level
-[analogicznie]
+| Kryterium | Punkty | Uwaga |
+|---|---|---|
+| Przepływy procesów | 0 / 0.5 / 1.0 | |
+| Subdomeny i core domain | 0 / 0.5 / 1.0 | |
+| Reguły biznesowe i polityki | 0 / 0.5 / 1.0 | |
+| Granice kontekstów i pivotal events | 0 / 0.5 / 1.0 | |
+| Relacje między kontekstami | 0 / 0.5 / 1.0 | |
+| Wyjątki i hot spoty | 0 / 0.5 / 1.0 | |
 
 ### Design Level
-[analogicznie]
+| Kryterium | Punkty | Uwaga |
+|---|---|---|
+| Agregaty / encje | 0 / 0.5 / 1.0 | |
+| Reguły niezmienników | 0 / 0.5 / 1.0 | |
+| Kontrakty / interfejsy | 0 / 0.5 / 1.0 | |
+| Reguły walidacji | 0 / 0.5 / 1.0 | |
 
 ## Rekomendacje dla orchestratora
 - [lista brakujących danych z priorytetem: blocker / nice-to-have]
@@ -152,23 +174,39 @@ którego ten skill nie może pobrać z materiałów.
 - Jeśli konwersja materiału była oznaczona jako `lossy` — obniż ocenę pokrycia tego materiału o 20%.
 - Jeśli ten sam obszar jest pokryty przez wiele plików — sumuj pokrycie, nie mnóż.
 - Zachowaj ostrożność: lepiej niedoszacować pokrycie niż przeszacować.
-```
+- Gotowy Event Storming (zdjęcie tablicy, eksport z Miro) zwykle pokrywa zdarzenia
+  i przepływy, ale rzadko typologię subdomen i relacje między kontekstami — oceniaj
+  te kryteria osobno, nie zakładaj pokrycia z samego faktu istnienia ES.
+- **Tryb audit — twarde blokery (minimalny kontrakt wsadu).** Każdy niespełniony warunek
+  zwracaj jako pozycję w `blockers` — orkiestrator zatrzyma na nich bramę akceptacji (B2):
+  - brak opisu systemu w materiałach lub seedzie
+  - liczba zdarzeń poniżej dolnego progu dla ocenionej złożoności
+    (niska < 5, średnia < 15, wysoka < 40)
+  - zero zidentyfikowanych integracji zewnętrznych — formułuj jako pytanie:
+    "nie znaleziono integracji — czy system działa w izolacji, czy nie ujęto ich we wsadzie?"
+  Blokery formułuj jako pytania do interesariuszy, nie jako twierdzenia o brakach —
+  luka może być stratą konwersji, nie faktem domenowym.
 
 ---
 
 ## Integracja z orchestratorem
 
-Orchestrator wywołuje ten skill po Kroku B (normalizacja), przed Krokiem E (data-prep).
+Orchestrator wywołuje ten skill pomiędzy etapami data-prep:
 
 ```
-Krok B: normalizacja materiałów
+data-prep, etap prepare (składowanie, konwersja, zasilanie wsteczne)
   ↓
 [ten skill]: ocena pokrycia → index.md + handoff JSON
   ↓
-Krok D: zasilanie wsteczne (jeśli potrzebne)
-  ↓
-Krok E: data-prep seed dla fazy startowej
+data-prep, etap seed (kompilacja seed files, coverage z index.md)
 ```
+
+Pliki derived z zasilania wstecznego istnieją już w `state/inputs/processed/`
+w momencie oceny — uwzględniaj je jak każdy inny materiał (jeden przebieg oceny).
+
+`index.md` jest własnością tego skilla — żaden inny skill do niego nie zapisuje.
+Lista materiałów i flagi konwersji (`lossy`) pochodzą z `manifest.md` (własność data-prep)
+oraz z frontmatter plików `*-processed.md`.
 
 Orchestrator odczytuje `coverage` z handoff JSON i:
 - wyświetla użytkownikowi tabelę pokrycia z `index.md`

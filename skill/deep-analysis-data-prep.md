@@ -2,10 +2,10 @@
 name: deep-analysis-data-prep
 description: >
   Przetwarza materiały wejściowe dostarczone przez użytkownika przed uruchomieniem faz analizy.
-  Uruchamiaj gdy użytkownik dostarczył jakiekolwiek materiały (obrazy, tekst, diagramy, ES).
-  Wykonuje: składowanie oryginałów, konwersję, normalizację, ocenę złożoności systemu,
-  ocenę pokrycia per faza, zasilanie wsteczne między fazami, budowanie seed files.
-  Zwraca handoff z wynikiem pokrycia i ścieżkami seed files dla orkiestratora.
+  Uruchamiany przez orkiestrator w dwóch etapach: 'prepare' (składowanie, konwersja, normalizacja,
+  ocena złożoności, zasilanie wsteczne) oraz 'seed' (kompilacja seed files po ocenie pokrycia).
+  Ocena pokrycia NIE należy do tego skilla — wykonuje ją deep-analysis-coverage-assessment
+  pomiędzy etapami. Zwraca handoff z wynikami etapu.
 tools: Read, Write, Bash, Glob, LS
 ---
 
@@ -13,22 +13,42 @@ tools: Read, Write, Bash, Glob, LS
 
 ## Zasada nadrzędna
 
-Ten skill przetwarza dane — nie analizuje domeny.
+Ten skill przetwarza dane — nie analizuje domeny i **nie ocenia pokrycia**
+(to odpowiedzialność `deep-analysis-coverage-assessment`).
 Każdy krok tworzy pliki na dysku przed przejściem do następnego.
 Awaria w połowie = odtworzenie od ostatniego zapisanego kroku.
+
+Skill działa w dwóch etapach wywoływanych osobno przez orkiestrator:
+
+```
+etap: prepare  →  Kroki 0–4 (katalogi, złożoność, składowanie, konwersja, zasilanie wsteczne)
+       ↓
+[coverage-assessment — uruchamia orkiestrator]
+       ↓
+etap: seed     →  Krok 5 (kompilacja seed files z wartością coverage z index.md)
+```
 
 ---
 
 ## Dane wejściowe od orkiestratora
 
 ```
+Etap prepare:
+- etap: prepare
 - opis systemu (2-3 zdania z pytania orientacyjnego nr 3)
-- ścieżki do materiałów dostarczonych przez użytkownika
+- ścieżka do material_input/ (materiały dostarczone przez użytkownika)
 - ścieżka do katalogu state/
 - lista faz wybranych przez użytkownika (BP / PL / DL)
+
+Etap seed:
+- etap: seed
+- lista faz do zasilenia
+- ścieżka do katalogu state/
 ```
 
 ---
+
+# ETAP PREPARE
 
 ## Krok 0 — Utwórz strukturę katalogów
 
@@ -43,6 +63,10 @@ state/inputs/
 Zasada ogólna: każdy skill tworzy własne katalogi na początku działania.
 Nie zakładaj że katalog istnieje.
 
+**Brak materiałów:** jeśli `material_input/` nie istnieje lub jest pusty — wykonaj tylko
+Krok 1 (złożoność), zwróć handoff ze statusem `completed` i pustym manifestem.
+Orkiestrator zdecyduje o starcie bez seedów.
+
 ---
 
 ## Krok 1 — Ocena złożoności systemu
@@ -54,6 +78,9 @@ Złożoność niska:   jeden kontekst, mało integracji, prosta domena
 Złożoność średnia: kilka kontekstów lub integracji, reguły biznesowe
 Złożoność wysoka:  wiele kontekstów, złożone reguły, dużo integracji
 ```
+
+To **jedyne** miejsce w systemie gdzie złożoność jest oceniana — orkiestrator
+i pozostałe skille konsumują wynik, nie oceniają ponownie.
 
 Zapisz wynik do `state/inputs/complexity.md`:
 
@@ -72,16 +99,23 @@ generated-by: data-prep
 
 ---
 
-## Krok 2 — Składowanie oryginałów
+## Krok 2 — Składowanie oryginałów i manifest
 
-Skopiuj wszystkie materiały bez modyfikacji do `state/inputs/raw/`.
-Zanotuj każdy plik w `state/inputs/processed/index.md` (tworzysz plik jeśli nie istnieje):
+Skopiuj wszystkie materiały z `material_input/` bez modyfikacji do `state/inputs/raw/`.
+Zanotuj każdy plik w `state/inputs/processed/manifest.md` (tworzysz plik jeśli nie istnieje):
 
 ```markdown
-# Inputs Index
-| Plik | Typ | Konwersja | Użyty w fazach | Pokrycie BP | Pokrycie PL | Pokrycie DL |
-|---|---|---|---|---|---|---|
+---
+generated-by: data-prep
+---
+# Inputs Manifest
+| Plik | Typ | Konwersja | Użyty w fazach |
+|---|---|---|---|
+| [nazwa] | [typ] | clean / lossy | phase-1, phase-2 |
 ```
+
+Manifest jest własnością data-prep. Ocena pokrycia trafia do osobnego pliku
+`index.md`, którego właścicielem jest `deep-analysis-coverage-assessment`.
 
 ---
 
@@ -110,8 +144,20 @@ used-in: [lista faz]
 ---
 ```
 
-Jeśli konwersja oznaczona jako `lossy` — zapisz do `state/inputs/processed/index.md`
-flagę `requires-verification: true`. Orkiestrator zapyta użytkownika o weryfikację.
+Jeśli konwersja oznaczona jako `lossy` — zapisz flagę `requires-verification: true`
+w `manifest.md` i zwróć plik w polu `requires_verification` handoffu.
+Orkiestrator zapyta użytkownika o weryfikację.
+
+**Tagowanie typów zdarzeń:** przy ekstrakcji oznacz każde zdarzenie jako
+`domenowe / zewnętrzne / czasowe`. Fazy w trybie audit konsumują tę klasyfikację
+i nie wykonują własnej — zdarzenia zewnętrzne zasilają wprost analizę granic
+(Krok 2a Big Picture).
+
+**Cross-check ekstrakcji z opisem systemu:** porównaj wynik ekstrakcji (zwłaszcza
+z obrazów) z opisem systemu. Obszar obecny w opisie, a nieobecny w ekstrakcji →
+flaga `requires-verification` z adnotacją "prawdopodobna strata konwersji, nie luka
+domenowa". Bez tego cross-checku audyt zgłosi fałszywe luki tam, gdzie zawiodła
+konwersja, a nie wiedza interesariuszy.
 
 ---
 
@@ -137,38 +183,21 @@ target-phase: phase-[M]
 ---
 ```
 
----
+Zasilanie wsteczne wykonuje się **przed** oceną pokrycia — coverage-assessment
+widzi już pliki derived i ocenia pokrycie z ich uwzględnieniem (jeden przebieg oceny).
 
-## Krok 5 — Ocena pokrycia per faza
-
-Na podstawie złożoności (Krok 1) i zawartości przetworzonych materiałów oceń pokrycie:
-
-```
-Big Picture   [X%]
-  - aktorzy zidentyfikowani?
-  - zdarzenia domenowe — liczba względem złożoności
-  - granice systemu określone?
-  - hot spoty wskazane?
-
-Process Level [X%]
-  - przepływy procesów opisane?
-  - reguły biznesowe?
-  - wyjątki i ścieżki alternatywne?
-  - bounded contexts zarysowane?
-
-Design Level  [X%]
-  - agregaty zidentyfikowane?
-  - encje i value objects?
-  - kontrakty między kontekstami?
-```
-
-Zaktualizuj `state/inputs/processed/index.md` — uzupełnij kolumny pokrycia per plik.
+Koniec etapu prepare — zwróć handoff.
 
 ---
 
-## Krok 6 — Budowanie seed files
+# ETAP SEED
 
-Dla każdej wybranej fazy skompiluj seed file z przetworzonych materiałów:
+## Krok 5 — Budowanie seed files
+
+Wymaga istnienia `state/inputs/processed/index.md` (wynik coverage-assessment).
+Jeśli nie istnieje — zwróć handoff ze statusem `error` i opisem braku.
+
+Dla każdej wskazanej fazy skompiluj seed file z przetworzonych materiałów:
 
 ```
 state/inputs/processed/phase-1-seed.md   ← jeśli BP wybrane
@@ -181,13 +210,17 @@ Format nagłówka seed:
 ---
 seed-for: big-picture | process-level | design-level
 session: [nazwa]
-coverage: [X%]
+coverage: [X%]            ← wartość odczytana z index.md dla tej fazy
 sources:
   - state/inputs/processed/[plik]-processed.md
   - state/inputs/processed/phase-[N]-derived-for-[M].md
 ---
 
 # Seed: [nazwa fazy]
+
+## Kontekst domeny
+[dosłowny opis systemu z complexity.md — obowiązkowa pierwsza sekcja każdego seeda;
+ obrazy i wyekstrahowane zdarzenia bez kontekstu tekstowego nie kalibrują analizy]
 
 [skompilowana treść z wszystkich relevantnych przetworzonych plików]
 ```
@@ -198,14 +231,10 @@ sources:
 
 ```json
 {
-  "phase": "data-prep",
+  "skill": "data-prep",
+  "etap": "prepare | seed",
   "status": "completed | completed-with-warnings | error",
   "complexity": "niska | średnia | wysoka",
-  "coverage": {
-    "big-picture": "[X%]",
-    "process-level": "[X%]",
-    "design-level": "[X%]"
-  },
   "seed_files": {
     "phase-1": "state/inputs/processed/phase-1-seed.md",
     "phase-2": "state/inputs/processed/phase-2-seed.md",
@@ -213,10 +242,14 @@ sources:
   },
   "requires_verification": ["lista plików z lossy conversion"],
   "open_questions": [],
-  "suggested_next": "big-picture | process-level | design-level",
-  "user_decision_required": true
+  "user_decision_required": false
 }
 ```
 
-`status: completed-with-warnings` gdy którykolwiek plik ma `converted: lossy`.
-`suggested_next` = najniższa faza z pokryciem > 0%.
+Zasady wypełniania:
+- `complexity` — tylko w etapie prepare
+- `seed_files` — tylko w etapie seed (w prepare: pusty obiekt)
+- `requires_verification` — tylko w etapie prepare
+- `status: completed-with-warnings` gdy którykolwiek plik ma `converted: lossy`
+- Ocena pokrycia i `recommended_start_phase` NIE są zwracane przez ten skill —
+  pochodzą z handoffu `deep-analysis-coverage-assessment`

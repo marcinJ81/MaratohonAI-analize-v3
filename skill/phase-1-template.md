@@ -4,6 +4,8 @@ session: [nazwa projektu]
 generated: [data]
 status: completed | partial
 coverage: [X%]
+input-quality: accepted | n/a
+lossy-files: [N]
 sources:
   - state/inputs/processed/phase-1-seed.md
   - user-input
@@ -28,9 +30,20 @@ sources:
 
 Zdarzenia zapisuj w czasie przeszłym (np. "Zamówienie złożone", "Płatność zatwierdzona").
 
-| ID    | Zdarzenie | Aktor (ID) | Obszar | Hot Spot? |
-|-------|-----------|------------|--------|-----------|
-| E-001 |           |            |        | tak / nie |
+| ID    | Zdarzenie | Aktor (ID) | Typ                              | Obszar | Hot Spot? |
+|-------|-----------|------------|----------------------------------|--------|-----------|
+| E-001 |           |            | domenowe / zewnętrzne / czasowe  |        | tak / nie |
+
+---
+
+## Pivotal Events
+
+Pivotal event = zdarzenie po którym stan systemu zmienia się fundamentalnie.
+Prefiks `PE-` jest globalny — Faza 2 kontynuuje numerację i uzupełnia kolumnę granic BC.
+
+| ID     | Zdarzenie (E-ID) | Dlaczego pivotal                                          |
+|--------|------------------|-----------------------------------------------------------|
+| PE-001 |                  | punkt bez powrotu / zmiana fazy procesu / zmiana właściciela |
 
 ---
 
@@ -49,14 +62,38 @@ Zdarzenia zapisuj w czasie przeszłym (np. "Zamówienie złożone", "Płatność
 ## Hot Spoty
 
 Hot Spot = miejsce konfliktu, niejasności, ryzyka lub brakującej wiedzy domenowej.
+Nie usuwaj rozwiązanych — oznacz `resolved` z powodem (track decyzji).
 
-| ID    | Opis | Powód                                    | Powiązane zdarzenia (ID) | Priorytet         |
-|-------|------|------------------------------------------|--------------------------|-------------------|
-| H-001 |      | konflikt / niejasność / ryzyko / brak wiedzy |                      | wysoki / średni / niski |
+| ID    | Opis | Powód                                    | Powiązane zdarzenia (ID) | Status                     | Priorytet                       |
+|-------|------|------------------------------------------|--------------------------|----------------------------|---------------------------------|
+| H-001 |      | konflikt / niejasność / ryzyko / brak wiedzy |                      | open / resolved: [powód]   | blocker / wysoki / średni / niski |
+
+---
+
+## Read Modele (opcjonalnie — jeśli bleed-through)
+
+<!-- Wypełniane tylko gdy użytkownik wybrał bleed-through read modeli w Kroku 0. -->
+
+| ID     | Moment (E-ID / PE-ID) | Kto musi widzieć | Co musi być widoczne |
+|--------|------------------------|------------------|----------------------|
+| RM-001 |                        |                  |                      |
+
+---
+
+## Zasady biznesowe (opcjonalnie — jeśli bleed-through)
+
+<!-- Wypełniane tylko gdy użytkownik wybrał bleed-through zasad biznesowych w Kroku 0. -->
+<!-- Zasady na poziomie przepływu, bez szczegółów implementacji.                       -->
+
+| ID     | Reguła | Wpływa na (E-ID) |
+|--------|--------|-------------------|
+| RB-001 |        |                   |
 
 ---
 
 ## Wnioski
+
+<!-- Reguła pewności: wniosek oparty wyłącznie na materiale lossy → maksymalnie "średnia". -->
 
 | ID    | Wniosek | Pewność                  | Źródło                   |
 |-------|---------|--------------------------|--------------------------|
