@@ -91,6 +91,22 @@ Nie usuwaj rozwiązanych — oznacz `resolved` z powodem (track decyzji).
 
 ---
 
+## Zdarzenia proponowane
+
+<!-- Wypełniane w Krokach 4-5 (patrz Krok 5a skilla), tylko gdy luka wynika z logiki -->
+<!-- samego procesu (np. brak przeciwieństwa zdarzenia bramkującego), a nie z nieznanej -->
+<!-- reguły biznesowej. W tym drugim przypadku luka zostaje wyłącznie jako Hot Spot / -->
+<!-- Otwarte pytanie — bez wpisu tutaj. Status zawsze `unconfirmed`, dopóki ekspert    -->
+<!-- domenowy nie potwierdzi zdarzenia (wtedy przenosi się do "Zdarzenia domenowe"     -->
+<!-- z nowym ID z prefiksem E-, a wpis tutaj można oznaczyć jako potwierdzony/odrzucony). -->
+<!-- Jeśli brak zdarzeń proponowanych, pomiń sekcję.                                    -->
+
+| ID     | Zdarzenie (hipoteza) | Powiązany Hot Spot (ID) | Umiejscowienie na osi (po E-ID) | Uzasadnienie                              | Status      |
+|--------|------------------------|--------------------------|-----------------------------------|--------------------------------------------|-------------|
+| EP-001 |                        |                          |                                    | logiczna konieczność wynikająca z procesu | unconfirmed |
+
+---
+
 ## Wnioski
 
 <!-- Reguła pewności: wniosek oparty wyłącznie na materiale lossy → maksymalnie "średnia". -->

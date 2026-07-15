@@ -121,6 +121,8 @@ Wyświetl użytkownikowi podsumowanie: ile zdarzeń / aktorów / hot spotów ju�
 Zapytaj: "Chcesz uzupełnić te dane czy coś korygować?"
 
 Nie generuj własnych zdarzeń poza materiałem — seed jest źródłem prawdy dla tego kroku.
+Reguła dotyczy wyłącznie tego kroku (wczytanie i wstępna praca na seedzie) — nie ogranicza
+Kroków 4-5, które mają osobną, jawną zgodę na uzupełnianie zdarzeń proponowanych (patrz Krok 5a).
 Typy zdarzeń (domenowe / zewnętrzne / czasowe) powinny być już otagowane przez data-prep;
 jeśli nie są — sklasyfikuj przy wczytaniu (to oznaczenie, nie analiza).
 Zapisz do `state/phase-1/working/raw-events.md`.
@@ -319,6 +321,29 @@ Zaktualizuj pliki zgodnie z tabelą aktualizacji (poniżej).
 
 ---
 
+## Krok 5a — Zdarzenia proponowane
+
+Gdy w Krokach 4-5 wykryjesz lukę, rozróżnij jej źródło:
+
+- **luka wynika z logiki samego procesu** (np. istnieje zdarzenie bramkujące typu
+  akceptacja/zatwierdzenie, ale nie ma jego przeciwieństwa — brak ścieżki odrzucenia
+  jest logiczną koniecznością, nie kwestią nieznanej reguły biznesowej) →
+  dodaj **zdarzenie proponowane**, nie tylko hot spota.
+- **luka wymaga wiedzy biznesowej, której nie masz** (np. dokładny próg liczbowy,
+  konkretny aktor, kształt wyjątku) → zostaw jako hot spot / pytanie otwarte,
+  bez dodawania zdarzenia. Nie zgaduj treści reguł biznesowych.
+
+Zdarzenie proponowane:
+- dostaje ID z prefiksem `EP-` (Event Proposed), numerowane niezależnie od `E-`
+- ma status `unconfirmed`
+- jest powiązane z hot spotem, który je wywołał (pole `powiązany hot spot: H-XXX`)
+- trafia na oś czasu jako element tymczasowy — w Kroku 6 renderowany osobno od
+  zdarzeń potwierdzonych, nigdy nie miesza się z nimi bez wyraźnego oznaczenia
+
+Zapisz do `state/phase-1/working/proposed-events.md`.
+
+---
+
 ## Aktualizacja plików po zmianach (obowiązuje w Krokach 4 i 5)
 
 Każde odkrycie ma przypisaną akcję — wykonuj deterministycznie, nie uznaniowo:
@@ -330,6 +355,9 @@ Każde odkrycie ma przypisaną akcję — wykonuj deterministycznie, nie uznanio
 | nowy system zewnętrzny | dopisz do `boundaries.md` (system, miejsce na osi, kierunek) |
 | hot spot rozwiązany | oznacz w `hotspots.md` jako `[resolved: powód]` — nie usuwaj |
 | nowy hot spot | dopisz do `hotspots.md` |
+| brakujące zdarzenie wynikające z logiki procesu (nie z nieznanej reguły biznesowej) | dodaj do `proposed-events.md` ze statusem `unconfirmed`, ID `EP-`, powiąż z hot spotem (patrz Krok 5a) |
+| zdarzenie proponowane potwierdzone (EP- → E-) | przenieś z `proposed-events.md` do `raw-events.md` + `timeline.md` z nowym ID `E-`; w `proposed-events.md` oznacz `[confirmed: E-XXX]` — nie usuwaj; hot spot źródłowy oznacz `[resolved: potwierdzono jako E-XXX]` |
+| zdarzenie proponowane odrzucone | oznacz w `proposed-events.md` jako `[rejected: powód]` — nie usuwaj; hot spot źródłowy pozostaje wg oceny (open/resolved) |
 | zmiana kolejności zdarzeń | zaktualizuj `timeline.md`, sprawdź czy pivotal events nadal pasują |
 | nowy pivotal event | zaktualizuj `timeline.md`, zweryfikuj grupy kontekstów z Kroku 2a |
 | nowy read model (jeśli bleed-through) | dopisz do `read-models.md` |
@@ -351,6 +379,8 @@ state/phase-1/working/boundaries.md      → sekcja Granice systemu
 state/phase-1/working/hotspots.md        → sekcja Hot Spoty (w tym resolved)
 state/phase-1/working/read-models.md     → sekcja Read Modele (jeśli bleed-through)
 state/phase-1/working/business-rules.md  → sekcja Zasady biznesowe (jeśli bleed-through)
+state/phase-1/working/proposed-events.md → sekcja Zdarzenia proponowane (unconfirmed,
+                                           z powiązanym hot spotem)
 ```
 
 Wygeneruj ID dla każdego elementu (A-001, E-001, H-001, PE-001 dla pivotal events).
@@ -360,6 +390,8 @@ Wypełnij frontmatter: `input-quality` i `lossy-files` wartościami z bramy B2 o
 Wypełnij sekcję Wnioski — minimum 3 wnioski z oceną pewności.
 **Reguła pewności:** wniosek oparty wyłącznie na materiale `lossy` → pewność maksymalnie `średnia`.
 Wypełnij sekcję Otwarte pytania — oznacz blokery.
+Wypełnij sekcję Zdarzenia proponowane — każde z ID `EP-`, statusem `unconfirmed`
+i odnośnikiem do hot spota źródłowego (jeśli brak zdarzeń proponowanych, pomiń sekcję).
 
 Zapisz do `state/phase-1-output.md`.
 
@@ -372,6 +404,7 @@ Wyświetl podsumowanie:
 Zebrano:
 - Aktorów: [N]
 - Zdarzeń domenowych: [N]
+- Zdarzeń proponowanych: [N] (unconfirmed)
 - Pivotal Events: [N]
 - Granic / integracji: [N]
 - Hot Spotów: [N] (w tym resolved: [N])
@@ -381,6 +414,10 @@ Zebrano:
 ```
 
 Zapytaj: "Czy wynik odzwierciedla Twoją wiedzę o domenie? Co wymaga korekty?"
+Jeśli istnieją zdarzenia proponowane (EP-), zapytaj o każde osobno:
+"Czy [EP-XXX] faktycznie miało miejsce w tym procesie?" — potwierdzenie promuje
+je do zdarzenia domenowego (EP- → E-, patrz tabela aktualizacji), odrzucenie
+oznacza je jako `rejected` bez usuwania.
 Nanieś korekty zgodnie z tabelą aktualizacji i zapisz zaktualizowany `state/phase-1-output.md`.
 
 ---
@@ -398,6 +435,9 @@ Nanieś korekty zgodnie z tabelą aktualizacji i zapisz zaktualizowany `state/ph
   ],
   "hotspots": [
     {"id": "H-001", "desc": "opis", "status": "open|resolved", "priority": "blocker|wysoki|średni|niski"}
+  ],
+  "proposed_events": [
+    {"id": "EP-001", "desc": "opis", "status": "unconfirmed", "related_hotspot": "H-XXX"}
   ],
   "external_systems": ["nazwa systemu (kierunek interakcji)"],
   "bleed_through": {"read_models": false, "business_rules": false},
